@@ -22,8 +22,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 # Create upload directory
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-
-
+# Yemeni Currency class mapping
 CURRENCY_CLASSES = {
     0: '10 back',
     1: '10 front', 
@@ -32,11 +31,11 @@ CURRENCY_CLASSES = {
     4: '1000 back',
     5: '1000 front',
     6: '200 back',
-    7: '200_front',
-    8: '5_back',
-    9: '5_front',
-    10: '500_back',
-    11: '500_front'
+    7: '200 front',
+    8: '5 back',
+    9: '5 front',
+    10: '500 back',
+    11: '500 front'
 }
 
 def load_model():
@@ -143,7 +142,13 @@ def predict():
                 print(f"Probabilities: {probabilities}")
                 print(f"Predicted class: {predicted_class}, Confidence: {confidence:.4f}")
             
-            predicted_label = CURRENCY_CLASSES.get(predicted_class, 'Unknown')
+            # Apply confidence threshold (20%)
+            if confidence < 0.2:
+                predicted_label = "Unrecognized object"
+                confidence_display = "Low confidence"
+            else:
+                predicted_label = CURRENCY_CLASSES.get(predicted_class, 'Unknown')
+                confidence_display = f"{round(confidence * 100, 2)}%"
             
             # Convert image to base64 for display
             buffered = io.BytesIO()
@@ -152,8 +157,9 @@ def predict():
             
             return jsonify({
                 'prediction': predicted_label,
-                'confidence': round(confidence * 100, 2),
-                'image_data': f"data:image/jpeg;base64,{img_str}"
+                'confidence': confidence_display,
+                'image_data': f"data:image/jpeg;base64,{img_str}",
+                'raw_confidence': round(confidence * 100, 2)
             })
             
         except Exception as e:
@@ -193,11 +199,18 @@ def predict_camera():
             print(f"Camera raw outputs: {outputs[0]}")
             print(f"Camera predicted class: {predicted_class}, Confidence: {confidence:.4f}")
         
-        predicted_label = CURRENCY_CLASSES.get(predicted_class, 'Unknown')
+        # Apply confidence threshold (20%)
+        if confidence < 0.2:
+            predicted_label = "Unrecognized object"
+            confidence_display = "Low confidence"
+        else:
+            predicted_label = CURRENCY_CLASSES.get(predicted_class, 'Unknown')
+            confidence_display = f"{round(confidence * 100, 2)}%"
         
         return jsonify({
             'prediction': predicted_label,
-            'confidence': round(confidence * 100, 2)
+            'confidence': confidence_display,
+            'raw_confidence': round(confidence * 100, 2)
         })
         
     except Exception as e:
@@ -219,51 +232,11 @@ def test_model():
             'output_shape': list(output.shape),
             'model_type': 'ResNet18',
             'currency_types': 'Yemeni (5, 10, 100, 200, 500, 1000) - Front & Back',
-            'preprocessing': 'Resize(256) -> CenterCrop(224) -> Normalize(ImageNet stats)'
+            'preprocessing': 'Resize(256) -> CenterCrop(224) -> Normalize(ImageNet stats)',
+            'confidence_threshold': '20%'
         })
     except Exception as e:
         return jsonify({'error': f'Model test failed: {str(e)}'}), 500
-
-@app.route('/debug_preprocess', methods=['POST'])
-def debug_preprocess():
-    """Debug endpoint to check preprocessing"""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
-    
-    file = request.files['file']
-    if file and allowed_file(file.filename):
-        try:
-            image = Image.open(file.stream).convert('RGB')
-            
-            # Test both old and new preprocessing
-            old_transform = transforms.Compose([
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-            
-            new_transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
-            
-            old_tensor = old_transform(image).unsqueeze(0)
-            new_tensor = new_transform(image).unsqueeze(0)
-            
-            return jsonify({
-                'original_size': image.size,
-                'old_tensor_shape': list(old_tensor.shape),
-                'new_tensor_shape': list(new_tensor.shape),
-                'old_tensor_range': [float(old_tensor.min()), float(old_tensor.max())],
-                'new_tensor_range': [float(new_tensor.min()), float(new_tensor.max())]
-            })
-            
-        except Exception as e:
-            return jsonify({'error': f'Debug failed: {str(e)}'}), 500
-    
-    return jsonify({'error': 'Invalid file type'}), 400
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5005)

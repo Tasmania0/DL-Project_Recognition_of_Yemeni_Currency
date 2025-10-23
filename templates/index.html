@@ -21,6 +21,8 @@
             --accent-grey: #34495e;
             --light-grey: #ecf0f1;
             --white: #ffffff;
+            --warning: #f39c12;
+            --danger: #e74c3c;
             --shadow: 0 10px 30px rgba(0,0,0,0.3);
             --gradient: linear-gradient(135deg, var(--primary-dark) 0%, var(--accent-grey) 100%);
         }
@@ -230,6 +232,7 @@
             height: 320px;
             object-fit: cover;
             display: block;
+            transform: scaleX(-1); /* Mirror the camera feed */
         }
 
         .camera-overlay {
@@ -254,10 +257,19 @@
             margin-top: 30px;
             padding: 25px;
             border-radius: 20px;
-            background: rgba(46, 204, 113, 0.1);
-            border: 1px solid var(--primary-green);
+            border: 1px solid;
             display: none;
             animation: slideInUp 0.5s ease;
+        }
+
+        .result-container.success {
+            background: rgba(46, 204, 113, 0.1);
+            border-color: var(--primary-green);
+        }
+
+        .result-container.warning {
+            background: rgba(243, 156, 18, 0.1);
+            border-color: var(--warning);
         }
 
         @keyframes slideInUp {
@@ -285,11 +297,18 @@
         .prediction-text {
             font-size: 1.8rem;
             font-weight: 700;
-            color: var(--primary-green);
             margin-bottom: 10px;
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        .prediction-text.success {
+            color: var(--primary-green);
+        }
+
+        .prediction-text.warning {
+            color: var(--warning);
         }
 
         .confidence-text {
@@ -329,6 +348,11 @@
             margin-top: 20px;
             border: 1px solid #e74c3c;
             display: none;
+        }
+
+        .confidence-warning {
+            color: var(--warning);
+            font-weight: 600;
         }
 
         .feature-grid {
@@ -426,14 +450,8 @@
 
                 <div class="result-container" id="uploadResult">
                     <img class="result-image" id="uploadImage" src="" alt="Uploaded Image">
-                    <div class="prediction-text">
-                        <i class="fas fa-check-circle"></i>
-                        <span id="uploadPrediction"></span>
-                    </div>
-                    <div class="confidence-text">
-                        <i class="fas fa-chart-line"></i>
-                        <span id="uploadConfidence"></span>
-                    </div>
+                    <div class="prediction-text" id="uploadPrediction"></div>
+                    <div class="confidence-text" id="uploadConfidence"></div>
                 </div>
 
                 <div class="error-message" id="uploadError"></div>
@@ -470,14 +488,8 @@
                 </div>
 
                 <div class="result-container" id="cameraResult">
-                    <div class="prediction-text">
-                        <i class="fas fa-check-circle"></i>
-                        <span id="cameraPrediction"></span>
-                    </div>
-                    <div class="confidence-text">
-                        <i class="fas fa-chart-line"></i>
-                        <span id="cameraConfidence"></span>
-                    </div>
+                    <div class="prediction-text" id="cameraPrediction"></div>
+                    <div class="confidence-text" id="cameraConfidence"></div>
                 </div>
 
                 <div class="error-message" id="cameraError"></div>
@@ -503,8 +515,8 @@
                 <div class="feature-icon">
                     <i class="fas fa-shield-alt"></i>
                 </div>
-                <h3>Accurate</h3>
-                <p>High Precision Detection</p>
+                <h3>Smart Detection</h3>
+                <p>Auto-rejects low confidence</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
@@ -599,9 +611,18 @@
 
         function showUploadResult(data) {
             uploadImage.src = data.image_data;
-            uploadPrediction.textContent = `${data.prediction}`;
-            uploadConfidence.textContent = `Confidence: ${data.confidence}%`;
-            uploadResult.classList.add('show');
+            
+            if (data.prediction === "Unrecognized object") {
+                uploadResult.className = 'result-container warning show';
+                uploadPrediction.className = 'prediction-text warning';
+                uploadPrediction.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Unrecognized Object';
+                uploadConfidence.innerHTML = '<i class="fas fa-info-circle"></i> Confidence too low for reliable detection';
+            } else {
+                uploadResult.className = 'result-container success show';
+                uploadPrediction.className = 'prediction-text success';
+                uploadPrediction.innerHTML = `<i class="fas fa-check-circle"></i> ${data.prediction}`;
+                uploadConfidence.innerHTML = `<i class="fas fa-chart-line"></i> Confidence: ${data.confidence}`;
+            }
         }
 
         // Camera functionality
@@ -641,7 +662,11 @@
             canvas.width = cameraFeed.videoWidth;
             canvas.height = cameraFeed.videoHeight;
             const context = canvas.getContext('2d');
-            context.drawImage(cameraFeed, 0, 0);
+            
+            // Mirror the captured image to match what user sees
+            context.translate(canvas.width, 0);
+            context.scale(-1, 1);
+            context.drawImage(cameraFeed, 0, 0, canvas.width, canvas.height);
             
             const imageData = canvas.toDataURL('image/jpeg');
 
@@ -672,9 +697,17 @@
         });
 
         function showCameraResult(data) {
-            cameraPrediction.textContent = `${data.prediction}`;
-            cameraConfidence.textContent = `Confidence: ${data.confidence}%`;
-            cameraResult.classList.add('show');
+            if (data.prediction === "Unrecognized object") {
+                cameraResult.className = 'result-container warning show';
+                cameraPrediction.className = 'prediction-text warning';
+                cameraPrediction.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Unrecognized Object';
+                cameraConfidence.innerHTML = '<i class="fas fa-info-circle"></i> Confidence too low for reliable detection';
+            } else {
+                cameraResult.className = 'result-container success show';
+                cameraPrediction.className = 'prediction-text success';
+                cameraPrediction.innerHTML = `<i class="fas fa-check-circle"></i> ${data.prediction}`;
+                cameraConfidence.innerHTML = `<i class="fas fa-chart-line"></i> Confidence: ${data.confidence}`;
+            }
         }
 
         // Utility functions
